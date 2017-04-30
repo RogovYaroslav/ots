@@ -1,0 +1,276 @@
+.TH "OTS" 1 "April 29, 2017" "ots version 1.0" "User Commands"
+
+.SH NAME
+.PP
+ots - OneTimeSecret.com client yeaaaah
+
+.SH SYNOPSIS
+.PP
+\fBseki\fR [\fImode\fR] [\fIoptions\fR] [\fIarguments\fR]
+
+.SH DESCRIPTION
+
+.PP
+ots is an open-source cli-program to work with OneTimeSecret.com (further Service) API.
+
+
+.PP
+Program is in fact a script written in Python 3.
+
+
+.PP
+OneTimeSecret.com provides a way to send some data securely. It stores Secrets. Secret - simply a message with timer that could be seen only one time. Being\fI Recieved\fR,\fI Burned \fR or having timer expired, Secret's deleted by Service with no way to restore.
+
+
+.PP
+Each secret has two keys associated with it: \fISecret Key\fR and \fIMetadata Key\fR. \fISecret Key\fR is used to recieve a Secret. \fIMetadata Key\fR is used to check Secret's status. Only Secret's creator should have Metadata Key, as it's used to Burn (that is, to erase) a Secret this Metadata associated with.
+
+Identity is simply a pair EMAIL:APIKEY stored in Configuration File. (see below in Credentials section). With no idenity name provided, program tries to use default. If no default credentials found, anonymous account used. It's used for authentification in Service
+
+
+
+
+.PP
+ots provides a dozen of modes to work with:
+
+.TP
+-S
+share a secret. Default mode
+
+.TP
+-R
+retrieve a secret
+
+.TP
+-C
+check availability of service. The only mode with no options and arguments
+
+.TP
+-B
+burn a secret (Not supported by Service yet)
+
+.TP
+-M
+check metadata
+
+.TP
+-G
+generate a secret
+
+.TP
+-L
+get last metadata (Not supported yet)
+
+
+.PP
+Most modes have common options. If option is somewhat ambiguous (like -k), it's explained in Mode's section.
+Common options are:
+
+.TP
+-i \fIidentity\fR
+use \fIidentity\fR (email, apikey) from Credentials File for authentication
+
+.TP
+-e \fIemail\fR
+use \fIemail\fR for authentication
+
+.TP
+-a \fIapikey\fR
+use /fIapikey/fR for authentication
+
+.TP
+-u
+print url instead of key (-S -M -G )
+
+.TP
+-m
+print metadata key instead of secret key (-M -G)
+
+.TP
+-v
+verbose. Print as much information as possible
+.TP
+-q
+quiet. Return only exit code
+
+.PP
+Warning: -e and -a options \fIoverride\fR credentials provided via -i option, which could lead them to be incorrect. Use wisely.
+.sp
+
+
+.SH
+MODES
+The following subsections desribe modes usage and their specific options.
+
+.SS
+\fBSHARE A SECRET (-S)\fR
+
+.PP
+Default mode that lets you to send a Secret and retrieve URL where one can view this Secret
+
+
+.PP
+-S is mode option for it
+
+.TP
+usage:
+\fBots\fR -S [\fIoptions\fR] [\fIarguments\fR]
+
+.PP
+Options manage both configuration of a secret and secret's message. Arguments are used as in "echo" command: they concatenated with space as a delimeter. Additional message content provided with options is separated with\fI newline \fR between them.
+
+.PP
+Options:
+
+.TP
+-f \fIfile\fR
+append \fI file \fR content to Secret's message.
+.TP
+-s \fIstring\fR
+append string to Secret list
+.TP
+-t \fItime\fR
+Secret's Time-To-Live. \fItime\fR is either a string in a form "1Y2M3d4h5m6s" (where letters are corresponding time units) or simply a number of seconds.
+.TP
+-r \fIemail\fR
+Recipient's \fIemail\fR where Secret's URL will be send to automatically by Service.
+.TP
+-p \fIpassphrase\fR
+\fIpassphrase\fR is used to encrypt a Secret and used as a password to access Secret's content. Hashed via bcrypt, as stated by Service.
+.TP
+-c
+copy result to clipboard (via xsel or xclip). Implies no -v option (i.e. ignores it).
+
+
+
+
+.SS
+\fBRETRIEVE A SECRET (-R)\fR
+
+.TP
+usage:
+\fBots\fR -R [\fIoptions\fR] [\fIarguments\fR]
+
+.PP
+Mode for retrieving a Secret. I.e. it's message.
+
+.PP
+Secret Key can be provided with option or as an argument (or list of them, if key's happened to have spaces somehow)
+
+.PP
+Options:
+
+.TP
+-k \fIsecret_key\fR
+\fIsecret key\fR of a Secret
+
+
+
+.SS
+\fBCHECK SERVICE -C\fR
+.PP
+No extra options should be provided.
+.PP
+Outputs Online or Offline depending on Service Response.
+.PP
+-q option forces program to return zero if Service is online and non-zero value otherwise and provide no output.
+
+
+
+
+.SS
+\fBBURN A SECRET -B\fR
+
+.PP
+PLACEHOLDER
+
+NOT SUPPORTED YET
+
+
+
+
+.SS
+\fBCHECK METADATA -M\fR
+
+.PP
+Metadata helps to check secret's various information, e.g. a status:
+
+.IP
+\(bu new (not checked via Metadata)
+.IP
+\(bu viewed (checked via Metadata)
+.IP
+\(bu received
+.IP
+\(bu burned
+
+.PP
+Without -v common option returns only Secret Key associated with Metadata Key provided
+
+.PP
+Options:
+
+.TP
+-k \fImetadata_key\fR
+\fImetadata key\fR of a Secret
+
+
+.SS
+\fBGENERATE A SECRET -G\fR
+
+.PP
+"Generate a short, unique secret. This is useful for temporary passwords, one-time pads, salts, etc."
+
+.PP
+Metadata and Secret Keys for this Secret are provided.
+
+.TP
+-p \fIpassphrase\fR
+\fIpassphrase\fR is used to encrypt a Secret and used as a password to access Secret's content. Hashed via bcrypt, as stated by Service.
+.TP
+-t \fItime\fR
+Secret's Time-To-Live. \fItime\fR is either a string in a form "1Y2M3d4h5m6s" (where letters are corresponding time units) or simply a number of seconds.
+
+PLACEHOLDER
+
+NOT SUPPORTED YET
+
+
+.SS
+\fBRECEIVE LAST METADATA -L\fR
+.PP
+PLACEHOLDER
+
+NOT SUPPORTED YET
+
+
+.SH
+BUGS
+.PP
+All bugs can be reported to github page of ots project (!!!)
+
+.SH
+AUTHOR
+.PP
+Written by Yaroslav Rogov
+
+
+
+.SH
+EXIT STATUS
+.TP
+0
+everything is OK
+.TP
+1
+program failed
+.TP
+2
+wrong options/usage
+.TP
+3
+service failed or wrong parameters
+.TP
+4
+secret doesn't exist or 8was received/burned
+
