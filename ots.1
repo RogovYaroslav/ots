@@ -19,7 +19,7 @@ Program is in fact a script written in Python 3.
 
 
 .PP
-OneTimeSecret.com provides a way to send some data securely. It stores Secrets. Secret - simply a message with timer that could be seen only one time. Being\fI Recieved\fR,\fI Burned \fR or having timer expired, Secret's deleted by Service with no way to restore.
+OneTimeSecret.com provides a way to send some data securely. It stores Secrets. Secret - simply a message with timer that could be seen only one time. Being \fIRecieved\fR, \fIBurned\fR or having timer (\fITTL\fR) expired, Secret's deleted by Service with no way to restore.
 
 
 .PP
@@ -109,12 +109,9 @@ The following subsections desribe modes usage and their specific options.
 Default mode that lets you to send a Secret and retrieve URL where one can view this Secret
 
 
-.PP
--S is mode option for it
-
 .TP
 usage:
-\fBots\fR -S [\fIoptions\fR] [\fIarguments\fR]
+\fBots\fR [-S] [\fIoptions\fR] [\fIarguments\fR]
 
 .PP
 Options manage both configuration of a secret and secret's message. Arguments are used as in "echo" command: they concatenated with space as a delimeter. Additional message content provided with options is separated with\fI newline \fR between them.
@@ -147,12 +144,12 @@ copy result to clipboard (via xsel or xclip). Implies no -v option (i.e. ignores
 .SS
 \fBRETRIEVE A SECRET (-R)\fR
 
+.PP
+Mode for retrieving a Secret. I.e. it's message.
+
 .TP
 usage:
 \fBots\fR -R [\fIoptions\fR] [\fIarguments\fR]
-
-.PP
-Mode for retrieving a Secret. I.e. it's message.
 
 .PP
 Secret Key can be provided with option or as an argument (or list of them, if key's happened to have spaces somehow)
@@ -168,12 +165,18 @@ Options:
 
 .SS
 \fBCHECK SERVICE -C\fR
-.PP
-No extra options should be provided.
+
 .PP
 Outputs Online or Offline depending on Service Response.
 .PP
 -q option forces program to return zero if Service is online and non-zero value otherwise and provide no output.
+
+.TP
+usage:
+\fBots\fR -C
+
+.PP
+No extra options should be provided.
 
 
 
@@ -182,10 +185,18 @@ Outputs Online or Offline depending on Service Response.
 \fBBURN A SECRET -B\fR
 
 .PP
-PLACEHOLDER
+Burn a Secret before someone read it. Metadata key is required and passed via -k option or as argument(s).
 
-NOT SUPPORTED YET
+.TP
+usage:
+\fBots\fR -B [\fIoptions\fR] [\fIarguments\fR]
 
+.PP
+Options:
+
+.TP
+-k \fImetadata_key\fR
+\fImetadata key\fR of a Secret
 
 
 
@@ -231,16 +242,10 @@ Metadata and Secret Keys for this Secret are provided.
 -t \fItime\fR
 Secret's Time-To-Live. \fItime\fR is either a string in a form "1Y2M3d4h5m6s" (where letters are corresponding time units) or simply a number of seconds.
 
-PLACEHOLDER
-
-NOT SUPPORTED YET
-
 
 .SS
 \fBRECEIVE LAST METADATA -L\fR
 .PP
-PLACEHOLDER
-
 NOT SUPPORTED YET
 
 
@@ -272,5 +277,5 @@ wrong options/usage
 service failed or wrong parameters
 .TP
 4
-secret doesn't exist or 8was received/burned
+secret doesn't exist or was received/burned
 

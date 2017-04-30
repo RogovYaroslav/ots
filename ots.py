@@ -5,6 +5,8 @@ from json.decoder import JSONDecodeError
 import requests
 from requests.auth import HTTPBasicAuth
 
+# Configuration loading
+from os.path import expanduser
 from configparser import ConfigParser
 
 from time import time, ctime
@@ -14,7 +16,7 @@ import re
 from getopt import getopt
 from getopt import GetoptError as goerror
 from sys import argv
-from os import environ as env
+
 
 '''
 	TODO:
@@ -32,95 +34,7 @@ from os import environ as env
 
 def usage():
 	USAGE = '''
-	usage: ots [mode] [options] [arguments]
-
-	ots (One Time Secret) is a open-source cli-program to work with onetimesecret.com (further Service) API.
-	Program is in fact script written in Python (3.+).
-
-	Secret is simply a message one would want to share with someone only one time.
-	Being received, Secret's deleted forever, as stated by Service.
-
-	So called Identity is simply a pair EMAIL:APIKEY stored from Credentials File. (see below in Credentials section)
-	It's used for authentification in Service
-
-	ots provides a dozen of modes to work with.
-	Modes are the following:
-
-		-S  -  share a secret. Default mode
-		-C  -  check availability of service. The only mode with no options and arguments
-		-R  -  retrieve a secret
-		-B  -  burn a secret
-		-M  -  check metadata
-		-G  -  generate a secret
-		-L  -  get last metadata
-
-
-	Common options for all modes (except availability check -C):
-
-		-i identity -  use identity (email, apikey) from Crdentials File for authentication
-
-		Following options override corresponding auth data received with -i option.
-
-		-e email    -  email for authentication
-		-a apikey   -  apikey for authentication
-
-		-k key      -  metadata or secret key depending on mode
-		-v          -  verbose. Print as much information as possible
-		-q          -  quiet. Return only exit code
-
-	==================================================================
-	SHARING A SECRET (-S)
-	==================================================================
-
-	Default mode that lets you to send a Secret and retrieve URL where one can view this Secret
-	You can provide a few Units (that is just Secret's lines) that will be joined with newline as separator.
-
-	-S is mode option for it
-
-	usage:
-		ots [-S] [options] [arguments]
-
-	Options manage both configuration of a secret and secret's content.
-	Arguments are used as in "echo" command: they concatenated with space as a delimeter
-
-	Options:
-
-		-f filename    -  add content of a file to m
-		-s unit        -  add Unit to Secret list
-		-t time        -  time-to-live for a Secret.
-		                  time is either a string in form "1Y2M3d4h5m6s" (where letters are corresponding time units)
-                                    or simply a number of seconds.
-		-r email       -  email where Secret's URL will be send to automatically through by Service itself.
-		-i identity    -  identity is a name of a set of parameters in Credentials File. (see below in corresp. section)
-		-p passphrase  -  passphrase used to encrypt Secret. Hashed via bcrypt, as stated by Service.
-		-q             -  quiet: print only Secret Key
-		-c             -  copy result to clipboard (via xsel or xclip). Implies -q
-
-
-	==================================================================
-	RETRIEVING A SECRET (-R)
-	==================================================================
-
-	Mode for retrieving a Secret. It's content, that is.
-
-	Common option -k provides Secret Key
-	Secret Key can be provided as an argument (or list of them, if key's happened to have spaces somehow)
-
-	==================================================================
-	CHECKING A SECRET WITH METADATA (-M)
-	==================================================================
-
-	without -v common option returns only Secret Key associated with Metadata Key provided
-
-
-	EXIT CODES
-		0 - everything is OK
-		1 - program failed
-		2 - wrong options/usage
-		3 - Service failed or wrong parameters
-
-
-
+usage: ots [mode] [options] [arguments]
 
 	'''
 
@@ -132,7 +46,10 @@ generate_url = 'https://onetimesecret.com/api/v1/generate'
 retrieve_url = 'https://onetimesecret.com/api/v1/secret/{}' # {} = SECRET_KEY
 metadata_url = 'https://onetimesecret.com/api/v1/private/{}' # {} = METADATA_KEY
 metadata_recent_url = 'https://onetimesecret.com/api/v1/private/recent'
-burn_url = 'https://onetimesecret.com/api/v1/burn/{}' # {} = METADATA_KEY
+burn_url = 'https://onetimesecret.com/api/v1/private/{}/burn' # {} = METADATA_KEY
+
+secret_url = 'https://onetimesecret.com/secret/{}' # {} = SECRET_KEY
+private_url = 'https://onetimesecret.com/private/{}' # {} = METADATA_KEY
 
 timepat = re.compile(
 '''
@@ -208,12 +125,32 @@ def retrieve_latest_metadata(data, auth=None):
 	return
 
 def generate_secret(data, auth=None):
-	#TODO
-	return
+	return api_call(generate_url, data, 'generating a Secret', auth=auth)
 
 def burn_secret(data, auth=None):
 	return api_call(burn_url.format(data['metadata_key']), None, 'burning a secret', auth=auth)
 
+
+config = None
+# initialization is before __main__ block below
+
+userdir = expanduser('~')
+config = ConfigParser()
+r = config.read( ('{}/.config/otsrc'.format(userdir), '{}/otsrc'.format(userdir)) ) # for Unix and Windows
+if len(r) == 0:
+	c = None
+
+def get_identity(name):
+	if config == None:
+		return None
+	if '' == name:
+		name = 'DEFAULT'
+	if name not in config:
+		return None
+	data = config[name]
+	if 'email' not in data and 'apikey' not in data:
+		return None
+	return data['email'], data['apikey']
 
 
 
@@ -257,9 +194,15 @@ def print_metadata_default(meta, print_recieve=True, print_meta=True):
 
 	t = time()
 
+
+	# Burn call specific problem
+	if 'secret_shortkey' in meta:
+		meta = meta['state']
+
 	# print(meta)
 
-	print( 'Secret key:', meta['secret_key'] )
+	if 'secret_key' in meta and meta['secret_key']:
+		print( 'Secret key:', meta['secret_key'] )
 
 
 	if 'state' in meta and print_recieve: # new, viewed (via metadata) or received (burn may be?)
@@ -284,7 +227,7 @@ def print_metadata_default(meta, print_recieve=True, print_meta=True):
 
 	if 'passphrase_required' in meta:
 		print( 'Passphrase required' if meta['passphrase_required'] else 'No passphrase' )
-	if meta['recipient']:
+	if 'recipient' in meta and meta['recipient']:
 		print( 'Recipient:', meta['recipient'] )
 
 	if print_meta:
@@ -293,222 +236,348 @@ def print_metadata_default(meta, print_recieve=True, print_meta=True):
 		print( 'Expired' if mexpired else 'Expiring:', ctime(t+meta['metadata_ttl']) )
 
 
-if __name__ != '__main__':
-	exit()
-
-print_metadata = print_metadata_default
-
-try:
-	opts, args = getopt(argv[1:],
-		'CSGRML' #Modes
-		+ 'vqi:e:a:k:' # Common options
-		+ 's:p:t:f:r:' # -S share options
-		)
-except goerror as err:
-	print(err)
-	usage()
-	exit(2)
-
-modes=[ k[0] for k in filter(lambda a: a[0][1:] in 'CSGRML' and not a[0][2:], opts)]
-
-if len(modes) == 0:
-	mode = '-S'
-else:
-	mode = modes[-1]
 
 
-if mode == '-C':
-	if check_availability():
-		exit(0)
+
+
+
+
+
+
+
+if __name__ == '__main__':
+
+	print_metadata = print_metadata_default
+
+	MODES = 'CSGRMLB'
+
+	try:
+		opts, args = getopt(argv[1:],
+			MODES #Modes
+			+ 'vqi:e:a:k:u' # Common options
+			+ 's:p:t:f:r:m' # -S share options
+			)
+	except goerror as err:
+		print(err)
+		usage()
+		exit(2)
+
+	modes=[ k[0] for k in filter(lambda a: a[0][1:] in MODES and not a[0][2:], opts)]
+
+	if len(modes) == 0:
+		mode = '-S'
 	else:
-		exit(1)
+		mode = modes[-1]
 
 
-key = ''
-identity = ['','']
-email = ''
-apikey = ''
-verbose = False
-
-for o in opts:
-	k = o[0]
-	arg = o[1]
-
-	if '-e' == k:
-		email = arg
-		continue
-
-	if '-a' == k:
-		apikey = arg
-		continue
-
-	if '-i' == k:
-		i = get_identity(arg)
-		if i == None:
-			print('[ERROR] No identity {} found'.format(arg))
+	if mode == '-C':
+		if check_availability():
+			exit(0)
+		else:
 			exit(1)
-		identity = i
-
-	if '-q' == k:
-		print = print_dummy
-
-	if '-v' == k:
-		verbose = True
 
 
-
-if len(email) != 0:
-	identity[0] = email
-
-if len(apikey) != 0:
-	identity[1] = apikey
-
-if len(identity[0]) == 0 or len(identity[1]) == 0:
-	auth = None
-else:
-	auth = HTTPBasicAuth(identity)
-
-
-
-# Sharing a secret
-if mode == '-S':
-
-	data = {
-		'secret' : '',
-		'passphrase' : '',
-		'ttl' : str(7*24*60*60), # default: 1 week
-		'recipient' : ''
-	}
-
-	quiet=False
-	secret=[]
+	key = ''
+	identity = list(get_identity('DEFAULT'))
+	email = ''
+	apikey = ''
+	verbose = False
+	print_url = False
 
 	for o in opts:
 		k = o[0]
 		arg = o[1]
 
-		if '-q' == k:
-			quiet=True
+		if '-e' == k:
+			email = arg
+			continue
 
-		if '-f' == k:
-			try:
-				with open(arg) as f:
-					secret.append(f.read())
-			except IOError as err:
-				print(err)
+		if '-a' == k:
+			apikey = arg
+			continue
+
+		if '-i' == k:
+			i = get_identity(arg)
+			if i == None:
+				print('[ERROR] No identity {} found'.format(arg))
 				exit(1)
+			identity = i
 
-		if '-s' == k:
-			secret.append(arg)
-			continue
+		if '-q' == k:
+			print = print_dummy
 
-		if '-t' == k:
-			data['ttl'] = str(parsetime(arg))
-			continue
+		if '-v' == k:
+			verbose = True
 
-		if '-r' == k:
-			data['recipient'] = arg;
-			continue
+		if '-u' == k:
+			print_url = True
 
-		if '-p' == k:
-			data['passphrase'] = arg
-			continue
 
-	if len(args) != 0:
-		secret.append(' '.join(args))
 
-	if len(secret) == 0:
-		print( 'ERROR: No secret provided' )
+	if len(email) != 0:
+		identity[0] = email
+
+	if len(apikey) != 0:
+		identity[1] = apikey
+
+	if len(identity[0]) == 0 or len(identity[1]) == 0:
+		auth = None
+	else:
+		auth = HTTPBasicAuth(*identity)
+
+
+
+
+	# Sharing a secret
+	if mode == '-S':
+
+		data = {
+			'secret' : '',
+			'passphrase' : '',
+			'ttl' : str(7*24*60*60), # default: 1 week
+			'recipient' : ''
+		}
+
+		quiet=False
+		secret=[]
+		print_secret=True
+
+		for o in opts:
+			k = o[0]
+			arg = o[1]
+
+			if '-f' == k:
+				try:
+					with open(arg) as f:
+						secret.append(f.read())
+				except IOError as err:
+					print(err)
+					exit(1)
+
+			if '-s' == k:
+				secret.append(arg)
+				continue
+
+			if '-t' == k:
+				data['ttl'] = str(parsetime(arg))
+				continue
+
+			if '-r' == k:
+				data['recipient'] = arg;
+				continue
+
+			if '-p' == k:
+				data['passphrase'] = arg
+				continue
+
+			if '-m' == k:
+				print_secret = False
+				continue
+
+
+		if len(args) != 0:
+			secret.append(' '.join(args))
+
+		if len(secret) == 0:
+			print( 'ERROR: No secret provided' )
+			exit(1)
+
+		data['secret']	= '\n'.join(secret)
+
+		# print(data)
+
+		meta = share_secret(data, auth)
+
+		if meta == None:
+			exit(3)
+
+		if verbose:
+			print_metadata(meta)
+		elif print_secret:
+			if print_url:
+				print(secret_url.format(meta['secret_key']))
+			else:
+				print(meta['secret_key'])
+		else:
+			if print_url:
+				print(private_url.format(meta['metadata_key']))
+			else:
+				print(meta['metadata_key'])
+
+		exit(0)
+
+
+
+
+	# Checking a metadata
+	if mode == '-M':
+		data = {	'metadata_key' : '' }
+
+		metadata_key = key
+
+		if len(metadata_key) == 0:
+			metadata_key=' '.join(args)
+
+		if len(metadata_key) == 0:
+			print('[ERROR] No metadata key was provided')
+			exit(2)
+
+		data['metadata_key'] = metadata_key
+
+		meta = retrieve_metadata(data, auth=auth)
+
+		if meta == None:
+			exit(3)
+
+		if verbose:
+			print_metadata(meta, print_meta=False)
+		elif print_secret:
+			if 'secret_key' not in meta:
+				print('No secret key')
+				exit(4)
+
+			if print_url:
+				print(secret_url.format(meta['secret_key']))
+			else:
+				print(meta['secret_key'])
+		else:
+			if 'metadata_key' not in meta:
+				print('No metadata key')
+				exit(3)
+
+			if print_url:
+				print(metadata_url.format(meta['metadata_key']))
+			else:
+				print(meta['metadata_key'])
+
+		exit(0)
+
+
+
+
+	# Retrieve a secret
+	if mode == '-R':
+
+		data = { 'secret_key' : '' }
+
+		secret_key = key
+
+		if len(secret_key) == 0:
+			secret_key = ' '.join(args)
+
+		if len(secret_key) == 0:
+			print('[ERROR] No secret key was provided')
+			exit(2)
+
+		data['secret_key'] = secret_key
+
+		response = retrieve_secret(data, auth=auth)
+
+		if response == None:
+			exit(3)
+
+		if verbose:
+			print('Secret Key:', response['secret_key'])
+			print('Value:', response['value'])
+		else:
+			print(response['value'])
+
+		exit(0)
+
+
+
+
+	# Generate a secret
+	if mode == '-G':
+		# print( 'Not supported yet' )
+		# exit(1)
+
+		data = {
+			'passphrase' : '',
+			'ttl' : str(7*24*60*60), # default: 1 week
+			'recipient' : ''
+		}
+
+		print_secret = True
+
+		for o in opts:
+			k = o[0]
+			arg = o[1]
+
+			if '-t' == k:
+				data['ttl'] = str(parsetime(arg))
+				continue
+
+			if '-r' == k:
+				data['recipient'] = arg;
+				continue
+
+			if '-p' == k:
+				data['passphrase'] = arg
+				continue
+
+			if '-m' == k:
+				print_secret = False
+				continue
+
+
+		# print(data)
+
+		meta = generate_secret(data, auth)
+
+		if meta == None:
+			exit(3)
+
+		if verbose:
+			print_metadata(meta)
+		elif print_secret:
+			if print_url:
+				print(secret_url.format(meta['secret_key']))
+			else:
+				print(meta['secret_key'])
+		else:
+			if print_url:
+				print(private_url.format(meta['metadata_key']))
+			else:
+				print(meta['metadata_key'])
+
+		exit(0)
+
+
+
+	# Retrieve set of metadata for last secrets
+	if mode == '-L':
+		print( 'Not supported yet' )
 		exit(1)
 
-	data['secret']	= '\n'.join(secret)
 
-	# print(data)
+	# Burn a Secret
+	if mode == '-B':
 
-	meta = share_secret(data, auth)
+		data = {	'metadata_key' : '' }
 
-	if meta == None:
-		exit(3)
+		metadata_key = key
 
-	if verbose:
-		print_metadata(meta)
-	else:
-		print(meta['secret_key'])
+		if len(metadata_key) == 0:
+			metadata_key=' '.join(args)
 
-	exit(0)
+		if len(metadata_key) == 0:
+			print('[ERROR] No metadata key was provided')
+			exit(2)
 
+		data['metadata_key'] = metadata_key
 
-# Checking a metadata
-if mode == '-M':
-	data = {	'metadata_key' : '' }
+		meta = burn_secret(data, auth=auth)
 
-	metadata_key = key
+		if meta == None:
+			exit(3)
 
-	if len(metadata_key) == 0:
-		metadata_key=' '.join(args)
+		# print("Burned")
+		print_metadata(meta, print_meta=False)
 
-	if len(metadata_key) == 0:
-		print('[ERROR] No metadata key was provided')
-		exit(2)
-
-	data['metadata_key'] = metadata_key
-
-	meta = retrieve_metadata(data, auth=auth)
-
-	if meta == None:
-		exit(3)
-
-	print_metadata(meta, print_meta=False)
-
-	exit(0)
-
-# Retrieve a secret
-if mode == '-R':
-
-	data = { 'secret_key' : '' }
-
-	secret_key = key
-
-	if len(secret_key) == 0:
-		secret_key = ' '.join(args)
-
-	if len(secret_key) == 0:
-		print('[ERROR] No secret key was provided')
-		exit(2)
-
-	data['secret_key'] = secret_key
-
-	response = retrieve_secret(data, auth=auth)
-
-	if response == None:
-		exit(3)
-
-	if verbose:
-		print('Secret Key:', response['secret_key'])
-		print('Value:', response['value'])
-	else:
-		print(response['value'])
-
-	exit(0)
+		exit(0)
 
 
-# Generate a secret
-if mode == '-G':
-	print( 'Not supported yet' )
+
+	usage()
 	exit(1)
-
-
-# Retrieve set of metadata for last secrets
-if mode == '-L':
-	print( 'Not supported yet' )
-	exit(1)
-
-# Burn a Secret
-if mode == '-B':
-	print( 'Not supported yet' )
-	exit(1)
-
-
-
-usage()
-exit(1)
